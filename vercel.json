@@ -45,7 +45,7 @@
     },
     {
       "path": "/api/cron/cleanup-qr",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }
