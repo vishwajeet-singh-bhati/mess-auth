@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /staff/
+Disallow: /student/
+Disallow: /api/
+Allow: /
+
+# This is a private institutional system — not for public indexing
