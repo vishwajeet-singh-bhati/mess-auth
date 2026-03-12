@@ -25,9 +25,17 @@ type Props = ManageProps | CreateProps
 export function StaffActions(props: Props) {
   const router = useRouter()
   const supabase = createClient()
+  
+  // ── HOOKS MUST BE AT THE VERY TOP ─────────────────────────────────────────
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ 
+    email: '', 
+    full_name: '', 
+    mess_id: 'mess_a' as MessId, 
+    password: '' 
+  })
 
   // ── Manage existing staff ─────────────────────────────────────────────────
   if (props.mode === 'manage') {
@@ -44,11 +52,10 @@ export function StaffActions(props: Props) {
 
     const reassignMess = async (messId: MessId) => {
       setLoading(true)
-      // Upsert mapping
       await supabase.from('staff_mess_mapping')
         .upsert({ user_id: staffUser.id, mess_id: messId, is_primary: true },
           { onConflict: 'user_id,mess_id' })
-      // Remove old mapping if different
+      
       if (staffUser.assignedMessId && staffUser.assignedMessId !== messId) {
         await supabase.from('staff_mess_mapping')
           .delete()
@@ -85,9 +92,7 @@ export function StaffActions(props: Props) {
     )
   }
 
-  // ── Create new staff account ───────────────────────────────────────────────
-  const [form, setForm] = useState({ email: '', full_name: '', mess_id: 'mess_a' as MessId, password: '' })
-
+  // ── Create new staff account Logic ─────────────────────────────────────────
   const handleCreate = async () => {
     if (!form.email || !form.full_name || !form.password) {
       setError('All fields are required.')
@@ -96,8 +101,6 @@ export function StaffActions(props: Props) {
     setLoading(true)
     setError(null)
 
-    // Note: In production, use Supabase admin API or invite flow.
-    // Here we call a server action / API route for secure user creation.
     try {
       const res = await fetch('/api/admin/staff', {
         method: 'POST',

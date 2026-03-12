@@ -1,6 +1,5 @@
 'use client'
 // app/(admin)/subscriptions/SubscriptionActions.tsx
-// Handles both creating new subscriptions and managing existing ones.
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -31,9 +30,21 @@ type Props = ManageProps | CreateProps
 export function SubscriptionActions(props: Props) {
   const router = useRouter()
   const supabase = createClient()
+
+  // ── HOOKS MUST BE AT THE VERY TOP ─────────────────────────────────────────
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  
+  const today = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({
+    roll_number: '',
+    mess_id: 'mess_a' as MessId,
+    start_date: today,
+    end_date: new Date().getFullYear() + '-12-31',
+    plan_name: 'Annual Plan',
+    monthly_fee: '3500',
+  })
 
   // ── Manage existing subscription ──────────────────────────────────────────
   if (props.mode === 'manage') {
@@ -82,21 +93,11 @@ export function SubscriptionActions(props: Props) {
     )
   }
 
-  // ── Create new subscription ────────────────────────────────────────────────
-  const [form, setForm] = useState({
-    roll_number: '',
-    mess_id: 'mess_a' as MessId,
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date().getFullYear() + '-12-31',
-    plan_name: 'Annual Plan',
-    monthly_fee: '3500',
-  })
-
+  // ── Create new subscription Logic ──────────────────────────────────────────
   const handleCreate = async () => {
     setError(null)
     setLoading(true)
 
-    // Find student by roll number
     const { data: student, error: sErr } = await supabase
       .from('students')
       .select('id')
@@ -109,8 +110,6 @@ export function SubscriptionActions(props: Props) {
       return
     }
 
-    // Check for existing active subscription
-    const today = new Date().toISOString().split('T')[0]
     const { data: existing } = await supabase
       .from('subscriptions')
       .select('id')
@@ -128,13 +127,13 @@ export function SubscriptionActions(props: Props) {
 
     const { error: insErr } = await supabase.from('subscriptions').insert({
       student_id:  student.id,
-      mess_id:     form.mess_id,
-      status:      'active',
-      start_date:  form.start_date,
-      end_date:    form.end_date,
-      plan_name:   form.plan_name,
+      mess_id:      form.mess_id,
+      status:       'active',
+      start_date:   form.start_date,
+      end_date:     form.end_date,
+      plan_name:    form.plan_name,
       monthly_fee: parseFloat(form.monthly_fee) || null,
-      created_by:  props.adminId,
+      created_by:   props.adminId,
     })
 
     if (insErr) {
