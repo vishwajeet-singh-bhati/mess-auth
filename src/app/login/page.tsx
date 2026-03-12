@@ -1,10 +1,13 @@
 'use client'
 // app/(auth)/login/page.tsx
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react' // Added Suspense here
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/types/database'
+
+// This line tells Next.js to skip static generation for this page
+export const dynamic = 'force-dynamic' 
 
 const ROLE_HOME: Record<UserRole, string> = {
   student: '/student/dashboard',
@@ -12,7 +15,7 @@ const ROLE_HOME: Record<UserRole, string> = {
   admin:   '/admin/dashboard',
 }
 
-export default function LoginPage() {
+function LoginContent() { // We moved the main logic into a sub-component
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect')
@@ -24,7 +27,6 @@ export default function LoginPage() {
 
   const supabase = createClient()
 
-  // If already logged in, redirect immediately
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
@@ -32,7 +34,7 @@ export default function LoginPage() {
         router.replace(redirectTo ?? (role ? ROLE_HOME[role] : '/'))
       }
     })
-  }, [])
+  }, [router, redirectTo, supabase.auth])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,49 +75,49 @@ export default function LoginPage() {
       <div
         aria-hidden
         style={{
-          position:     'fixed',
-          top:          '30%',
-          left:         '50%',
-          transform:    'translateX(-50%)',
-          width:        '500px',
-          height:       '400px',
-          background:   'radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)',
+          position:      'fixed',
+          top:           '30%',
+          left:          '50%',
+          transform:     'translateX(-50%)',
+          width:         '500px',
+          height:        '400px',
+          background:    'radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)',
           pointerEvents: 'none',
         }}
       />
 
       <div
         style={{
-          width:        '100%',
-          maxWidth:     '400px',
-          position:     'relative',
-          zIndex:       1,
+          width:         '100%',
+          maxWidth:      '400px',
+          position:      'relative',
+          zIndex:        1,
         }}
       >
         {/* Logo / title */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
           <div
             style={{
-              display:        'inline-flex',
-              alignItems:     'center',
-              justifyContent: 'center',
-              width:          '64px',
-              height:         '64px',
-              background:     'rgba(59,130,246,0.12)',
-              border:         '1px solid rgba(59,130,246,0.3)',
-              borderRadius:   '1rem',
-              fontSize:       '1.75rem',
-              marginBottom:   '1rem',
+              display:         'inline-flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+              width:           '64px',
+              height:          '64px',
+              background:      'rgba(59,130,246,0.12)',
+              border:          '1px solid rgba(59,130,246,0.3)',
+              borderRadius:    '1rem',
+              fontSize:        '1.75rem',
+              marginBottom:    '1rem',
             }}
           >
             🍽
           </div>
           <h1
             style={{
-              fontSize:      '1.75rem',
-              fontWeight:    800,
-              color:         '#f8fafc',
-              margin:        0,
+              fontSize:       '1.75rem',
+              fontWeight:     800,
+              color:          '#f8fafc',
+              margin:         0,
               letterSpacing: '-0.03em',
             }}
           >
@@ -160,19 +162,17 @@ export default function LoginPage() {
                 autoComplete="email"
                 placeholder="you@student.in"
                 style={{
-                  width:        '100%',
-                  background:   '#070d1a',
-                  border:       '1px solid #1e2d45',
+                  width:         '100%',
+                  background:    '#070d1a',
+                  border:        '1px solid #1e2d45',
                   borderRadius: '0.6rem',
-                  padding:      '0.75rem 1rem',
-                  color:        '#f1f5f9',
-                  fontSize:     '0.95rem',
-                  outline:      'none',
-                  boxSizing:    'border-box',
-                  transition:   'border-color 0.2s',
+                  padding:       '0.75rem 1rem',
+                  color:         '#f1f5f9',
+                  fontSize:      '0.95rem',
+                  outline:       'none',
+                  boxSizing:     'border-box',
+                  transition:    'border-color 0.2s',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#3b82f6' }}
-                onBlur={e => { e.target.style.borderColor = '#1e2d45' }}
               />
             </div>
 
@@ -189,19 +189,17 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 placeholder="••••••••"
                 style={{
-                  width:        '100%',
-                  background:   '#070d1a',
-                  border:       '1px solid #1e2d45',
+                  width:         '100%',
+                  background:    '#070d1a',
+                  border:        '1px solid #1e2d45',
                   borderRadius: '0.6rem',
-                  padding:      '0.75rem 1rem',
-                  color:        '#f1f5f9',
-                  fontSize:     '0.95rem',
-                  outline:      'none',
-                  boxSizing:    'border-box',
-                  transition:   'border-color 0.2s',
+                  padding:       '0.75rem 1rem',
+                  color:         '#f1f5f9',
+                  fontSize:      '0.95rem',
+                  outline:       'none',
+                  boxSizing:     'border-box',
+                  transition:    'border-color 0.2s',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#3b82f6' }}
-                onBlur={e => { e.target.style.borderColor = '#1e2d45' }}
               />
             </div>
 
@@ -225,7 +223,7 @@ export default function LoginPage() {
               disabled={loading}
               style={{
                 background:    loading ? '#1e40af' : '#2563eb',
-                color:         'white',
+                color:          'white',
                 border:        'none',
                 borderRadius:  '0.6rem',
                 padding:       '0.85rem',
@@ -268,6 +266,7 @@ export default function LoginPage() {
             >
               <span style={{ color: '#374151' }}>{role}</span>
               <button
+                type="button"
                 onClick={() => { setEmail(email); setPassword('MessAuth@2024') }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -289,5 +288,14 @@ export default function LoginPage() {
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
       `}</style>
     </main>
+  )
+}
+
+// Final Export wrapped in Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   )
 }
