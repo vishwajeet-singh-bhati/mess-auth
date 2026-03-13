@@ -4,7 +4,7 @@
 // Called when a logged-in student scans a mess entrance QR.
 //
 // POST /api/auth/scan
-// Body: { qr_token: string }
+// Body: { qr_token: "MESS_A" | "MESS_B" }
 // Auth: Requires valid Supabase student session
 //
 // Returns:
@@ -56,8 +56,9 @@ export async function POST(req: NextRequest) {
     return badRequest('Missing or invalid qr_token field')
   }
 
-  if (qr_token.length > 2048) {
-    return badRequest('qr_token exceeds maximum length')
+  // Static QR only contains "MESS_A" or "MESS_B" — max 10 chars
+  if (qr_token.length > 10) {
+    return badRequest('Invalid QR code')
   }
 
   // ── Extract client metadata for audit log ────────────────────────────────
@@ -71,17 +72,13 @@ export async function POST(req: NextRequest) {
   // ── Run authorization engine ──────────────────────────────────────────────
   const result = await authorizeViaScan(
     qr_token,
-    user.id,           // Supabase auth UID
+    user.id,
     ipAddress,
     userAgent
   )
 
-  // 200 for success, 403 for any denial (not a server error)
   return NextResponse.json(result, {
     status: result.success ? 200 : 403,
-    headers: {
-      // Never cache authorization responses
-      'Cache-Control': 'no-store',
-    },
+    headers: { 'Cache-Control': 'no-store' },
   })
 }

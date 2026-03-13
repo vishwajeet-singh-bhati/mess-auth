@@ -2,28 +2,19 @@
 // ============================================================
 // CORE AUTHORIZATION ENGINE
 // ============================================================
-// This module is the single source of truth for all meal
-// authorization logic. All validation happens server-side.
-//
 // Authorization pipeline (in order):
-//   1. Verify QR token signature & expiry
-//   2. Check token not replayed (DB lookup by jti)
-//   3. Fetch student profile & check active/not-blocked
-//   4. Check active subscription exists for TODAY
-//   5. Check subscription is for the CORRECT mess
+//   1. Validate mess ID from static QR
+//   2. Fetch student profile & check active/not-blocked
+//   3. Check active subscription exists for TODAY
+//   4. Check subscription is for the CORRECT mess
 //      (or temporary permission override)
-//   6. Determine active meal slot from DB config
-//   7. Check student hasn't already consumed this slot today
-//   8. AUTHORIZE: mark token used + write meal_log
-//   9. Log all attempts (success & denied) for reporting
+//   5. Determine active meal slot from DB config
+//   6. Check student hasn't already consumed this slot today
+//   7. AUTHORIZE: write meal_log
+//   8. Log all attempts (success & denied) for reporting
 // ============================================================
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import {
-  verifyToken,
-  hashToken,
-  QRTokenError,
-} from '@/lib/qr/tokens'
 import {
   getCurrentMealSlot,
   dateToDateString,
@@ -38,6 +29,10 @@ import type {
   AuthorizationMethod,
 } from '@/types/database'
 
+// ─── Valid static QR values ──────────────────────────────────────────────────
+
+const VALID_MESS_IDS: MessId[] = ['mess_a', 'mess_b']
+
 // ─── Denial message copy ─────────────────────────────────────────────────────
 
 const DENIAL_MESSAGES: Record<DenialReason, string> = {
@@ -50,17 +45,17 @@ const DENIAL_MESSAGES: Record<DenialReason, string> = {
   inactive_subscription:
     'Your mess subscription is not currently active. Contact the hostel office.',
   expired_qr:
-    'This QR code has expired. A fresh code appears at the entrance every 30 seconds.',
+    'Invalid QR code. Please scan the official QR poster at the mess entrance.',
   invalid_qr:
-    'Invalid QR code. Please scan the official QR displayed at the mess entrance.',
+    'Invalid QR code. Please scan the official QR poster at the mess entrance.',
   invalid_token:
-    'Token verification failed. Please re-scan the mess entrance QR.',
+    'Invalid QR code. Please scan the official QR poster at the mess entrance.',
   blocked_student:
     'Your account has been blocked. Please visit the hostel office for assistance.',
   no_subscription:
     'You do not have an active mess subscription. Please register at the hostel office.',
   qr_already_used:
-    'This QR code has already been used. A new code refreshes every 30 seconds — please scan the current one.',
+    'Invalid QR code. Please scan the official QR poster at the mess entrance.',
   student_not_found:
     'Student account not found. Please contact the hostel office.',
 }
@@ -71,7 +66,6 @@ interface AttemptContext {
   messId: MessId
   studentId?: string
   rollNumber?: string
-  qrSessionId?: string
   method: AuthorizationMethod
   ipAddress?: string
   userAgent?: string
@@ -96,20 +90,19 @@ async function logAttempt(
   const db = createAdminClient()
   try {
     await db.from('authorization_attempts').insert({
-      student_id:     ctx.studentId   ?? null,
-      roll_number:    ctx.rollNumber  ?? null,
+      student_id:     ctx.studentId  ?? null,
+      roll_number:    ctx.rollNumber ?? null,
       mess_id:        ctx.messId,
-      qr_session_id:  ctx.qrSessionId ?? null,
+      qr_session_id:  null,
       method:         ctx.method,
       was_successful: wasSuccessful,
       denial_reason:  (denialReason ?? null) as any,
-      meal_type:      (mealType    ?? null) as any,
+      meal_type:      (mealType     ?? null) as any,
       ip_address:     ctx.ipAddress  ?? null,
       user_agent:     ctx.userAgent  ?? null,
       attempted_at:   new Date().toISOString(),
     })
   } catch (err) {
-    // Logging must never break authorization flow
     console.error('[authorization] Failed to log attempt:', err)
   }
 }
@@ -117,15 +110,13 @@ async function logAttempt(
 // ─── QR-based authorization ──────────────────────────────────────────────────
 
 /**
- * Authorize a student meal via QR scan.
+ * Authorize a student meal via static QR scan.
+ *
+ * The QR poster contains a plain mess identifier: "MESS_A" or "MESS_B"
+ * Student scans it → app sends it here → we check subscription + meal slot.
  *
  * Called from: POST /api/auth/scan
  * Requires: valid Supabase session (student auth_id)
- *
- * @param qrToken       - Raw token string decoded from QR
- * @param studentAuthId - Supabase auth.users.id of the scanning student
- * @param ipAddress     - Request IP for audit
- * @param userAgent     - Request User-Agent for audit
  */
 export async function authorizeViaScan(
   qrToken: string,
@@ -136,25 +127,19 @@ export async function authorizeViaScan(
   const db = createAdminClient()
   const now = new Date()
 
-  // ── STEP 1: Verify token signature & expiry ──────────────────────────────
-  let tokenPayload
-  try {
-    tokenPayload = verifyToken(qrToken)
-  } catch (err) {
-    const code = err instanceof QRTokenError ? err.code : 'UNKNOWN'
-    const reason: DenialReason =
-      code === 'TOKEN_EXPIRED' ? 'expired_qr' : 'invalid_qr'
+  // ── STEP 1: Validate mess ID from static QR ──────────────────────────────
+  // QR contains "MESS_A" or "MESS_B" — normalize to lowercase "mess_a"/"mess_b"
+  const messId = qrToken.trim().toLowerCase() as MessId
 
-    // We don't have messId from an invalid token — use 'mess_a' as fallback for logging
+  if (!VALID_MESS_IDS.includes(messId)) {
     await logAttempt(
       { messId: 'mess_a', method: 'qr_scan', ipAddress, userAgent },
       false,
-      reason
+      'invalid_qr'
     )
-    return denied(reason)
+    return denied('invalid_qr')
   }
 
-  const messId = tokenPayload.mess_id as MessId
   const ctx: AttemptContext = {
     messId,
     method: 'qr_scan',
@@ -162,30 +147,7 @@ export async function authorizeViaScan(
     userAgent,
   }
 
-  // ── STEP 2: Check token replay (jti uniqueness) ──────────────────────────
-  const tokenHash = hashToken(qrToken)
-
-  const { data: qrSession } = await db
-    .from('qr_sessions')
-    .select('id, is_used, expires_at')
-    .eq('id', tokenPayload.jti)           // jti == qr_sessions.id
-    .single()
-
-  // If session doesn't exist in DB, token was never registered (forged/invalid)
-  if (!qrSession) {
-    await logAttempt(ctx, false, 'invalid_token')
-    return denied('invalid_token')
-  }
-
-  if (qrSession.is_used) {
-    ctx.qrSessionId = qrSession.id
-    await logAttempt(ctx, false, 'qr_already_used')
-    return denied('qr_already_used')
-  }
-
-  ctx.qrSessionId = qrSession.id
-
-  // ── STEP 3: Fetch student profile ────────────────────────────────────────
+  // ── STEP 2: Fetch student profile ────────────────────────────────────────
   const { data: userRecord } = await db
     .from('users')
     .select(`
@@ -227,7 +189,7 @@ export async function authorizeViaScan(
     }
   }
 
-  // ── STEP 4: Check active subscription ───────────────────────────────────
+  // ── STEP 3: Check active subscription ───────────────────────────────────
   const today = dateToDateString(now)
 
   const { data: subscription } = await db
@@ -244,9 +206,8 @@ export async function authorizeViaScan(
     return denied('no_subscription')
   }
 
-  // ── STEP 5: Check mess match (or temporary permission) ───────────────────
+  // ── STEP 4: Check mess match (or temporary permission) ───────────────────
   if (subscription.mess_id !== messId) {
-    // Check for an admin-granted temporary override
     const { data: tempPerm } = await db
       .from('temporary_permissions')
       .select('id')
@@ -262,10 +223,9 @@ export async function authorizeViaScan(
       await logAttempt(ctx, false, 'wrong_mess')
       return denied('wrong_mess')
     }
-    // Temp permission found — proceed with authorization
   }
 
-  // ── STEP 6: Determine current meal slot ──────────────────────────────────
+  // ── STEP 5: Determine current meal slot ──────────────────────────────────
   const { data: mealSlots } = await db
     .from('meal_slots')
     .select('meal_type, start_time, end_time, is_active')
@@ -279,7 +239,7 @@ export async function authorizeViaScan(
     return denied('outside_meal_hours')
   }
 
-  // ── STEP 7: Check duplicate meal ────────────────────────────────────────
+  // ── STEP 6: Check duplicate meal ─────────────────────────────────────────
   const { data: existingMeal } = await db
     .from('meal_logs')
     .select('id')
@@ -293,72 +253,45 @@ export async function authorizeViaScan(
     return denied('already_consumed')
   }
 
-  // ── STEP 8: AUTHORIZE ────────────────────────────────────────────────────
-  // All checks passed. Atomically:
-  //   a) Mark QR session as used (prevents replay)
-  //   b) Write meal log (prevents duplicate within this request)
+  // ── STEP 7: AUTHORIZE — write meal log ───────────────────────────────────
+  const { error: mealLogError } = await db.from('meal_logs').insert({
+    student_id:      student.id,
+    mess_id:         messId,
+    meal_type:       activeSlot.meal_type,
+    meal_date:       today,
+    authorized_at:   now.toISOString(),
+    method:          'qr_scan',
+    qr_session_id:   null,
+    subscription_id: subscription.id,
+  })
 
-  const [markUsedResult, mealLogResult] = await Promise.all([
-    // Mark QR token as used
-    db
-      .from('qr_sessions')
-      .update({
-        is_used: true,
-        used_at: now.toISOString(),
-        used_by: student.id,
-      })
-      .eq('id', qrSession.id)
-      .eq('is_used', false),   // optimistic lock: only update if still unused
-
-    // Create meal log
-    db.from('meal_logs').insert({
-      student_id:      student.id,
-      mess_id:         messId,
-      meal_type:       activeSlot.meal_type,
-      meal_date:       today,
-      authorized_at:   now.toISOString(),
-      method:          'qr_scan',
-      qr_session_id:   qrSession.id,
-      subscription_id: subscription.id,
-    }),
-  ])
-
-  // If QR was already marked used by a concurrent request — deny
-  if (markUsedResult.error) {
-    await logAttempt(ctx, false, 'qr_already_used', activeSlot.meal_type)
-    return denied('qr_already_used')
-  }
-
-  if (mealLogResult.error) {
-    // Meal log insert failed — likely a race condition duplicate
-    // The UNIQUE constraint on meal_logs fires here
-    if (mealLogResult.error.code === '23505') {
+  if (mealLogError) {
+    if (mealLogError.code === '23505') {
       await logAttempt(ctx, false, 'already_consumed', activeSlot.meal_type)
       return denied('already_consumed')
     }
-    console.error('[authorization] Meal log insert failed:', mealLogResult.error)
+    console.error('[authorization] Meal log insert failed:', mealLogError)
     await logAttempt(ctx, false, 'invalid_token', activeSlot.meal_type)
     return denied('invalid_token')
   }
 
-  // Fetch mess name for response
+  // ── STEP 8: Log success ──────────────────────────────────────────────────
   const { data: mess } = await db
     .from('messes')
     .select('name')
     .eq('id', messId)
     .single()
 
-  // Log successful attempt
   await logAttempt(ctx, true, undefined, activeSlot.meal_type)
 
   const responseData: MealAuthSuccessData = {
-    student_name:              userRecord.full_name,
-    roll_number:               student.roll_number,
-    mess_name:                 mess?.name ?? messId,
-    meal_type:                 activeSlot.meal_type,
-    authorized_at:             now.toISOString(),
-    subscription_valid_until:  subscription.end_date,
-    method:                    'qr_scan',
+    student_name:             userRecord.full_name,
+    roll_number:              student.roll_number,
+    mess_name:                mess?.name ?? messId,
+    meal_type:                activeSlot.meal_type,
+    authorized_at:            now.toISOString(),
+    subscription_valid_until: subscription.end_date,
+    method:                   'qr_scan',
   }
 
   return { success: true, data: responseData }
@@ -368,16 +301,6 @@ export async function authorizeViaScan(
 
 /**
  * Authorize a student meal via manual roll number entry by staff.
- * Runs the same eligibility checks as QR scan.
- * All manual actions are logged to both authorization_attempts and audit_logs.
- *
- * Called from: POST /api/auth/manual
- * Requires: valid Supabase session with role = 'staff'
- *
- * @param rollNumber  - Student roll number entered by staff
- * @param staffUserId - Internal users.id of the staff member
- * @param staffMessId - Mess the staff member manages
- * @param ipAddress   - Request IP for audit
  */
 export async function authorizeViaManual(
   rollNumber: string,
@@ -396,7 +319,6 @@ export async function authorizeViaManual(
     ipAddress,
   }
 
-  // Fetch student by roll number
   const { data: student } = await db
     .from('students')
     .select(`
@@ -419,7 +341,6 @@ export async function authorizeViaManual(
   }
 
   const userRecord = (student.users as any)?.[0] ?? student.users
-
   ctx.studentId = student.id
 
   if (student.is_blocked || !userRecord.is_active) {
@@ -433,7 +354,6 @@ export async function authorizeViaManual(
     }
   }
 
-  // Check subscription
   const { data: subscription } = await db
     .from('subscriptions')
     .select('id, mess_id, end_date')
@@ -453,7 +373,6 @@ export async function authorizeViaManual(
     return denied('wrong_mess')
   }
 
-  // Check meal slot
   const { data: mealSlots } = await db
     .from('meal_slots')
     .select('meal_type, start_time, end_time, is_active')
@@ -467,7 +386,6 @@ export async function authorizeViaManual(
     return denied('outside_meal_hours')
   }
 
-  // Check duplicate
   const { data: existingMeal } = await db
     .from('meal_logs')
     .select('id')
@@ -481,7 +399,6 @@ export async function authorizeViaManual(
     return denied('already_consumed')
   }
 
-  // Authorize
   const { error: insertError } = await db.from('meal_logs').insert({
     student_id:      student.id,
     mess_id:         staffMessId,
@@ -503,7 +420,6 @@ export async function authorizeViaManual(
     return denied('invalid_token')
   }
 
-  // Audit log for manual entry
   await db.from('audit_logs').insert({
     actor_id:    staffUserId,
     action:      'manual_verification',
@@ -524,13 +440,13 @@ export async function authorizeViaManual(
   return {
     success: true,
     data: {
-      student_name:              userRecord.full_name,
-      roll_number:               student.roll_number,
-      mess_name:                 mess?.name ?? staffMessId,
-      meal_type:                 activeSlot.meal_type,
-      authorized_at:             now.toISOString(),
-      subscription_valid_until:  subscription.end_date,
-      method:                    'manual_staff',
+      student_name:             userRecord.full_name,
+      roll_number:              student.roll_number,
+      mess_name:                mess?.name ?? staffMessId,
+      meal_type:                activeSlot.meal_type,
+      authorized_at:            now.toISOString(),
+      subscription_valid_until: subscription.end_date,
+      method:                   'manual_staff',
     },
   }
 }
