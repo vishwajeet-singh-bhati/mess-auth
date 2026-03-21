@@ -18,28 +18,30 @@ const DENIAL_MESSAGES: Record<string, { title: string; hint: string }> = {
 }
 
 export default function ScanPage() {
-  const [phase, setPhase]             = useState<ScanPhase>('loading')
-  const [result, setResult]           = useState<AuthResponse | null>(null)
-  const [torchOn, setTorchOn]         = useState(false)
+  const [phase, setPhase]           = useState<ScanPhase>('loading')
+  const [result, setResult]         = useState<AuthResponse | null>(null)
+  const [torchOn, setTorchOn]       = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
 
   const videoRef      = useRef<HTMLVideoElement>(null)
-  const streamRef     = useRef<MediaStream | null>(null)
   const canvasRef     = useRef<HTMLCanvasElement>(null)
-  const rafRef        = useRef<number>(0)
+  const streamRef     = useRef<MediaStream | null>(null)
+  const intervalRef   = useRef<any>(null)
   const mountedRef    = useRef(true)
-  const processingRef = useRef(false)
-  const jsQRRef       = useRef<any>(null)
+  const detectedRef   = useRef(false)  // prevents double-submit
 
-  const stopCamera = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
+  const stopCamera = () => {
+    clearInterval(intervalRef.current)
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
-  }, [])
+  }
 
-  const submitToken = useCallback(async (token: string) => {
+  const submitToken = async (token: string) => {
+    clearInterval(intervalRef.current)
+    stopCamera()
     setPhase('processing')
+
     try {
       const res  = await fetch('/api/auth/scan', {
         method: 'POST',
@@ -55,45 +57,35 @@ export default function ScanPage() {
       setResult({ success: false, reason: 'invalid_token', message: 'Network error. Please try again.' })
       setPhase('denied')
     }
-  }, [])
+  }
 
-  const startScanLoop = useCallback(() => {
-    const scan = () => {
-      if (!mountedRef.current || processingRef.current) return
-
-      const video  = videoRef.current
-      const canvas = canvasRef.current
-      const jsQR   = jsQRRef.current
-
-      if (!video || !canvas || !jsQR || video.readyState < 2 || video.videoWidth === 0) {
-        rafRef.current = requestAnimationFrame(scan)
-        return
-      }
-
-      canvas.width  = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-      ctx.drawImage(video, 0, 0)
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const decoded   = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      })
-
-      if (decoded?.data && !processingRef.current) {
-        processingRef.current = true
-        stopCamera()
-        submitToken(decoded.data)
-        return
-      }
-
-      rafRef.current = requestAnimationFrame(scan)
-    }
-    rafRef.current = requestAnimationFrame(scan)
-  }, [stopCamera, submitToken])
-
-  const startCamera = useCallback(async () => {
+  const startScanning = useCallback(async () => {
+    detectedRef.current = false
     setCameraError(null)
+
+    // Load jsQR if not already loaded
+    if (!(window as any).jsQR) {
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'
+        s.onload  = () => resolve()
+        s.onerror = () => {
+          // fallback CDN
+          const s2 = document.createElement('script')
+          s2.src = 'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js'
+          s2.onload  = () => resolve()
+          s2.onerror = () => reject()
+          document.head.appendChild(s2)
+        }
+        document.head.appendChild(s)
+      }).catch(() => {
+        setCameraError('Failed to load QR scanner. Check your internet connection.')
+        setPhase('scanning')
+        return
+      })
+    }
+
+    // Start camera
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -101,70 +93,79 @@ export default function ScanPage() {
       })
       if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
       streamRef.current = stream
+
       const track = stream.getVideoTracks()[0]
-      const caps  = track.getCapabilities?.() as any
+      const caps  = (track.getCapabilities?.() as any)
       if (caps?.torch) setTorchSupported(true)
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
+
       setPhase('scanning')
-      startScanLoop()
+
+      // Scan every 200ms — keeps trying until QR is found
+      intervalRef.current = setInterval(() => {
+        if (detectedRef.current) return
+
+        const video  = videoRef.current
+        const canvas = canvasRef.current
+        const jsQR   = (window as any).jsQR
+
+        if (!video || !canvas || !jsQR || video.readyState < 2 || video.videoWidth === 0) return
+
+        canvas.width  = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+        ctx.drawImage(video, 0, 0)
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const decoded   = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert',
+        })
+
+        if (decoded?.data) {
+          detectedRef.current = true
+          submitToken(decoded.data)
+        }
+      }, 200)
+
     } catch (err: any) {
       setCameraError(
         err?.name === 'NotAllowedError'
-          ? 'Camera permission denied. Please allow access in browser settings.'
-          : 'Could not open camera. Try refreshing.'
+          ? 'Camera permission denied. Please allow camera access in your browser settings.'
+          : 'Could not open camera. Try refreshing the page.'
       )
       setPhase('scanning')
     }
-  }, [startScanLoop])
+  }, [])
 
-  // Step 1: Load jsQR, then Step 2: start camera — sequential so jsQR is always ready first
   useEffect(() => {
     mountedRef.current = true
-
-    const loadJsQR = (src: string): Promise<void> =>
-      new Promise((resolve, reject) => {
-        const script = document.createElement('script')
-        script.src = src
-        script.onload  = () => { jsQRRef.current = (window as any).jsQR; resolve() }
-        script.onerror = () => reject()
-        document.head.appendChild(script)
-      })
-
-    // If already loaded from a previous render, skip download
-    if ((window as any).jsQR) {
-      jsQRRef.current = (window as any).jsQR
-      startCamera()
-      return () => { mountedRef.current = false; stopCamera() }
+    startScanning()
+    return () => {
+      mountedRef.current = false
+      stopCamera()
     }
+  }, [startScanning])
 
-    loadJsQR('https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js')
-      .catch(() => loadJsQR('https://unpkg.com/jsqr@1.4.0/dist/jsQR.js'))
-      .then(() => { if (mountedRef.current) startCamera() })
-      .catch(() => {
-        setCameraError('Failed to load QR scanner. Check your internet connection.')
-        setPhase('scanning')
-      })
-
-    return () => { mountedRef.current = false; stopCamera() }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const toggleTorch = useCallback(async () => {
+  const toggleTorch = async () => {
     const track = streamRef.current?.getVideoTracks()[0]
     if (!track) return
     const next = !torchOn
     try { await (track as any).applyConstraints({ advanced: [{ torch: next }] }); setTorchOn(next) } catch {}
-  }, [torchOn])
+  }
 
-  const reset = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
-    processingRef.current = false
-    setResult(null); setTorchOn(false); setCameraError(null)
+  const reset = () => {
+    stopCamera()
+    setResult(null)
+    setTorchOn(false)
+    setTorchSupported(false)
     setPhase('loading')
-    setTimeout(() => { if (mountedRef.current) startCamera() }, 150)
-  }, [startCamera])
+    detectedRef.current = false
+    setTimeout(() => { if (mountedRef.current) startScanning() }, 200)
+  }
 
   return (
     <div style={{
@@ -174,7 +175,7 @@ export default function ScanPage() {
     }}>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      {/* Camera — always in DOM */}
+      {/* Camera — always in DOM so ref stays valid */}
       <div style={{
         position: 'absolute', inset: 0,
         display: (phase === 'scanning' || phase === 'loading') ? 'block' : 'none',
@@ -189,10 +190,10 @@ export default function ScanPage() {
         }
       </div>
 
-      {/* Loading */}
+      {/* Loading spinner */}
       {phase === 'loading' && (
-        <div style={{ position:'relative', zIndex:10, flex:1, display:'flex', flexDirection:'column',
-          alignItems:'center', justifyContent:'center', gap:'1rem' }}>
+        <div style={{ position:'relative', zIndex:10, flex:1, display:'flex',
+          flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'1rem' }}>
           <div style={{ width:'48px', height:'48px', borderRadius:'50%',
             border:'3px solid rgba(255,255,255,0.15)', borderTop:'3px solid #fff',
             animation:'spin 0.8s linear infinite' }} />
@@ -203,6 +204,7 @@ export default function ScanPage() {
 
       {/* Scanning UI */}
       {phase === 'scanning' && !cameraError && <>
+        {/* Top bar */}
         <div style={{ position:'relative', zIndex:10, display:'flex', alignItems:'center',
           justifyContent:'space-between', padding:'3rem 1.25rem 1rem',
           background:'linear-gradient(to bottom, rgba(0,0,0,0.75), transparent)' }}>
@@ -215,15 +217,15 @@ export default function ScanPage() {
             : <div style={{ width:40 }} />}
         </div>
 
-        {/* Square viewfinder using box-shadow cutout */}
+        {/* Square viewfinder */}
         <div style={{ flex:1, position:'relative', display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ position:'relative', width:'260px', height:'260px',
             boxShadow:'0 0 0 9999px rgba(0,0,0,0.55)', borderRadius:'4px' }}>
             {[
-              { top:0, left:0,    borderTop:'3px solid #fff', borderLeft:'3px solid #fff',   borderTopLeftRadius:'4px' },
-              { top:0, right:0,   borderTop:'3px solid #fff', borderRight:'3px solid #fff',  borderTopRightRadius:'4px' },
-              { bottom:0, left:0, borderBottom:'3px solid #fff', borderLeft:'3px solid #fff', borderBottomLeftRadius:'4px' },
-              { bottom:0, right:0,borderBottom:'3px solid #fff', borderRight:'3px solid #fff',borderBottomRightRadius:'4px' },
+              { top:0,    left:0,   borderTop:'3px solid #fff', borderLeft:'3px solid #fff',    borderTopLeftRadius:'4px' },
+              { top:0,    right:0,  borderTop:'3px solid #fff', borderRight:'3px solid #fff',   borderTopRightRadius:'4px' },
+              { bottom:0, left:0,   borderBottom:'3px solid #fff', borderLeft:'3px solid #fff', borderBottomLeftRadius:'4px' },
+              { bottom:0, right:0,  borderBottom:'3px solid #fff', borderRight:'3px solid #fff',borderBottomRightRadius:'4px' },
             ].map((s, i) => <div key={i} style={{ position:'absolute', width:'28px', height:'28px', ...s }} />)}
             <div style={{ position:'absolute', left:'4px', right:'4px', height:'2px',
               background:'linear-gradient(to right, transparent, #22c55e, transparent)',
@@ -231,6 +233,7 @@ export default function ScanPage() {
           </div>
         </div>
 
+        {/* Bottom hint */}
         <div style={{ position:'relative', zIndex:10, padding:'1.5rem 2rem 3.5rem',
           background:'linear-gradient(to top, rgba(0,0,0,0.75), transparent)', textAlign:'center' }}>
           <p style={{ color:'rgba(255,255,255,0.75)', fontSize:'0.88rem', margin:0, lineHeight:1.6 }}>
@@ -248,10 +251,9 @@ export default function ScanPage() {
         `}</style>
       </>}
 
-      {/* Back button when camera errored */}
+      {/* Camera error back button */}
       {phase === 'scanning' && cameraError && (
-        <div style={{ position:'relative', zIndex:10, padding:'3rem 1.25rem 1rem',
-          background:'linear-gradient(to bottom, rgba(0,0,0,0.75), transparent)' }}>
+        <div style={{ position:'relative', zIndex:10, padding:'3rem 1.25rem 1rem' }}>
           <button onClick={() => window.history.back()} style={iconBtn}>←</button>
         </div>
       )}
@@ -287,8 +289,10 @@ export default function ScanPage() {
               { label:'Name',    value: result.data?.student_name },
               { label:'Roll No', value: result.data?.roll_number },
               { label:'Mess',    value: result.data?.mess_name },
-              { label:'Meal',    value: result.data?.meal_type ? result.data.meal_type.charAt(0).toUpperCase()+result.data.meal_type.slice(1) : '' },
-              { label:'Time',    value: result.data?.authorized_at ? new Date(result.data.authorized_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '' },
+              { label:'Meal',    value: result.data?.meal_type
+                  ? result.data.meal_type.charAt(0).toUpperCase() + result.data.meal_type.slice(1) : '' },
+              { label:'Time',    value: result.data?.authorized_at
+                  ? new Date(result.data.authorized_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '' },
             ].map(({label,value}) => value ? (
               <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                 padding:'0.9rem 1rem', background:'#1a1a1a', borderRadius:'10px' }}>
