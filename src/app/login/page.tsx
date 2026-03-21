@@ -1,8 +1,8 @@
 'use client'
 // app/login/page.tsx
-// Signup calls /api/auth/signup so backend creates users+students rows properly
+// Signup flow: fill form → send OTP → verify OTP → account created
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/types/database'
@@ -18,7 +18,7 @@ const ROLE_HOME: Record<UserRole, string> = {
 const HOSTELS = ['MVHR', 'Kalam', 'SRK', 'Kalpana']
 const WINGS   = ['Wing A', 'Wing B']
 
-type Mode = 'select' | 'student-login' | 'student-signup' | 'staff-login'
+type Mode = 'select' | 'student-login' | 'student-signup' | 'student-otp' | 'staff-login'
 
 function LoginContent() {
   const router       = useRouter()
@@ -31,9 +31,11 @@ function LoginContent() {
   const [error, setError]     = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // Login fields
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
 
+  // Signup fields
   const [fullName, setFullName]       = useState('')
   const [signupEmail, setSignupEmail] = useState('')
   const [signupPass, setSignupPass]   = useState('')
@@ -42,6 +44,19 @@ function LoginContent() {
   const [hostel, setHostel]           = useState('')
   const [wing, setWing]               = useState('')
   const [roomNumber, setRoomNumber]   = useState('')
+
+  // OTP fields
+  const [otp, setOtp]               = useState(['', '', '', ''])
+  const [otpCooldown, setOtpCooldown] = useState(0)
+  const otpRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null),
+                   useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)]
+
+  // Cooldown timer
+  useEffect(() => {
+    if (otpCooldown <= 0) return
+    const t = setTimeout(() => setOtpCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [otpCooldown])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -57,10 +72,12 @@ function LoginContent() {
     setEmail(''); setPassword('')
     setFullName(''); setSignupEmail(''); setSignupPass('')
     setConfirmPass(''); setRollNumber(''); setHostel(''); setWing(''); setRoomNumber('')
+    setOtp(['', '', '', '']); setOtpCooldown(0)
   }
 
   const goTo = (m: Mode) => { reset(); setMode(m) }
 
+  // ── Login ─────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true); setError(null)
@@ -84,7 +101,8 @@ function LoginContent() {
     router.refresh()
   }
 
-  const handleSignup = async (e: React.FormEvent) => {
+  // ── Validate signup form and send OTP ─────────────────────────────────────
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true); setError(null)
 
@@ -100,20 +118,84 @@ function LoginContent() {
       setError('Password must be at least 8 characters.')
       setLoading(false); return
     }
+    if (!fullName.trim()) { setError('Full name is required.'); setLoading(false); return }
+    if (!rollNumber.trim()) { setError('Roll number is required.'); setLoading(false); return }
     if (!hostel) { setError('Please select your hostel.'); setLoading(false); return }
     if (hostel !== 'SRK' && !wing) { setError('Please select your wing.'); setLoading(false); return }
+    if (!roomNumber.trim()) { setError('Room number is required.'); setLoading(false); return }
+
+    const res = await fetch('/api/auth/otp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: signupEmail.trim().toLowerCase() }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setError(data.error ?? 'Failed to send OTP. Please try again.')
+      setLoading(false); return
+    }
+
+    setLoading(false)
+    setOtp(['', '', '', ''])
+    setOtpCooldown(60)
+    setMode('student-otp')
+    setTimeout(() => otpRefs[0].current?.focus(), 100)
+  }
+
+  // ── Resend OTP ────────────────────────────────────────────────────────────
+  const handleResendOtp = async () => {
+    if (otpCooldown > 0) return
+    setError(null)
+    setOtpCooldown(60)
+
+    const res = await fetch('/api/auth/otp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: signupEmail.trim().toLowerCase() }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) setError(data.error ?? 'Failed to resend OTP.')
+    else setOtp(['', '', '', ''])
+  }
+
+  // ── OTP input handler ─────────────────────────────────────────────────────
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return
+    const newOtp = [...otp]
+    newOtp[index] = value.slice(-1)
+    setOtp(newOtp)
+    if (value && index < 3) otpRefs[index + 1].current?.focus()
+  }
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs[index - 1].current?.focus()
+    }
+  }
+
+  // ── Verify OTP and create account ─────────────────────────────────────────
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const otpValue = otp.join('')
+    if (otpValue.length !== 4) { setError('Please enter the complete 4-digit OTP.'); return }
+
+    setLoading(true); setError(null)
 
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: signupEmail.trim().toLowerCase(),
-        password: signupPass,
-        full_name: fullName.trim(),
+        email:       signupEmail.trim().toLowerCase(),
+        password:    signupPass,
+        full_name:   fullName.trim(),
         roll_number: rollNumber.trim(),
         hostel,
-        wing: hostel === 'SRK' ? undefined : wing,
+        wing:        hostel === 'SRK' ? undefined : wing,
         room_number: roomNumber.trim(),
+        otp:         otpValue,
       }),
     })
 
@@ -129,6 +211,7 @@ function LoginContent() {
     setTimeout(() => goTo('student-login'), 2000)
   }
 
+  // ── Styles ────────────────────────────────────────────────────────────────
   const S = {
     input: {
       width: '100%', background: '#070d1a', border: '1px solid #1e2d45',
@@ -176,6 +259,7 @@ function LoginContent() {
 
       <div style={{ width: '100%', maxWidth: '420px', position: 'relative', zIndex: 1 }}>
 
+        {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -191,7 +275,7 @@ function LoginContent() {
           </p>
         </div>
 
-        {/* ROLE SELECT */}
+        {/* ── ROLE SELECT ── */}
         {mode === 'select' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
@@ -216,7 +300,7 @@ function LoginContent() {
           </div>
         )}
 
-        {/* STUDENT LOGIN */}
+        {/* ── STUDENT LOGIN ── */}
         {mode === 'student-login' && (
           <div style={S.card}>
             <BackHeader title="Student Login" to="select" />
@@ -246,11 +330,11 @@ function LoginContent() {
           </div>
         )}
 
-        {/* STUDENT SIGNUP */}
+        {/* ── STUDENT SIGNUP ── */}
         {mode === 'student-signup' && (
           <div style={S.card}>
             <BackHeader title="Create Student Account" to="student-login" />
-            <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div>
                 <label style={S.label}>FULL NAME</label>
                 <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
@@ -301,10 +385,9 @@ function LoginContent() {
                 <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)}
                   required placeholder="Re-enter password" style={S.input} />
               </div>
-              {error   && <Err msg={error} />}
-              {success && <Ok  msg={success} />}
+              {error && <Err msg={error} />}
               <button type="submit" disabled={loading} style={S.btn()}>
-                {loading ? 'Creating account…' : 'Create Account'}
+                {loading ? 'Sending OTP…' : 'Send OTP to Email'}
               </button>
             </form>
             <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
@@ -317,7 +400,85 @@ function LoginContent() {
           </div>
         )}
 
-        {/* STAFF / ADMIN LOGIN */}
+        {/* ── OTP VERIFICATION ── */}
+        {mode === 'student-otp' && (
+          <div style={S.card}>
+            <BackHeader title="Verify Your Email" to="student-signup" />
+
+            {/* Info */}
+            <div style={{
+              background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)',
+              borderRadius: '0.6rem', padding: '0.85rem 1rem', marginBottom: '1.5rem',
+            }}>
+              <div style={{ fontSize: '0.82rem', color: '#93c5fd', marginBottom: '0.2rem', fontWeight: 600 }}>
+                OTP sent to
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#f1f5f9', fontWeight: 700 }}>
+                {signupEmail}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.3rem' }}>
+                Check your inbox. Valid for 10 minutes.
+              </div>
+            </div>
+
+            <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* 4-digit OTP boxes */}
+              <div>
+                <label style={S.label}>ENTER 4-DIGIT OTP</label>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+                  {otp.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={otpRefs[i]}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handleOtpChange(i, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(i, e)}
+                      style={{
+                        width: '64px', height: '64px', textAlign: 'center',
+                        fontSize: '1.75rem', fontWeight: 800, color: '#f1f5f9',
+                        background: '#070d1a', border: `2px solid ${digit ? '#3b82f6' : '#1e2d45'}`,
+                        borderRadius: '0.75rem', outline: 'none', boxSizing: 'border-box',
+                        caretColor: '#3b82f6',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {error   && <Err msg={error} />}
+              {success && <Ok  msg={success} />}
+
+              <button type="submit" disabled={loading || otp.join('').length !== 4} style={{
+                ...S.btn(),
+                opacity: (loading || otp.join('').length !== 4) ? 0.5 : 1,
+                cursor:  (loading || otp.join('').length !== 4) ? 'not-allowed' : 'pointer',
+              }}>
+                {loading ? 'Verifying…' : 'Verify & Create Account'}
+              </button>
+            </form>
+
+            {/* Resend */}
+            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+              {otpCooldown > 0 ? (
+                <span style={{ color: '#475569', fontSize: '0.85rem' }}>
+                  Resend OTP in <span style={{ color: '#3b82f6', fontWeight: 600 }}>{otpCooldown}s</span>
+                </span>
+              ) : (
+                <button onClick={handleResendOtp} style={{
+                  background: 'none', border: 'none', color: '#3b82f6',
+                  fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, padding: 0,
+                }}>
+                  Resend OTP
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── STAFF / ADMIN LOGIN ── */}
         {mode === 'staff-login' && (
           <div style={S.card}>
             <BackHeader title="Staff / Admin Login" to="select" />
