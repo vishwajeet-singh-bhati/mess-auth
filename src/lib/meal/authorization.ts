@@ -169,7 +169,8 @@ export async function authorizeViaScan(
     return denied('blocked_student')
   }
 
-  const student = (userRecord.students as any)?.[0]
+  const studentsRaw = userRecord.students as any
+  const student = Array.isArray(studentsRaw) ? studentsRaw[0] : studentsRaw
   if (!student) {
     await logAttempt(ctx, false, 'student_not_found')
     return denied('student_not_found')
