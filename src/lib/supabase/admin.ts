@@ -9,15 +9,12 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 
-let adminClient: ReturnType<typeof createClient<Database>> | null = null
-
 /**
- * Returns a singleton Supabase admin client (service role).
+ * Returns a Supabase admin client (service role).
  * Bypasses RLS — use only after performing your own authorization checks.
+ * Creates a fresh client each time to avoid stale state on Vercel serverless.
  */
 export function createAdminClient() {
-  if (adminClient) return adminClient
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -27,12 +24,10 @@ export function createAdminClient() {
     )
   }
 
-  adminClient = createClient<Database>(url, serviceKey, {
+  return createClient<Database>(url, serviceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   })
-
-  return adminClient
 }
