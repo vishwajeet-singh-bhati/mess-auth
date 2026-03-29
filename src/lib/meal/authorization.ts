@@ -148,13 +148,15 @@ export async function authorizeViaScan(
   }
 
   // ── STEP 2: Fetch student profile ────────────────────────────────────────
+  // FIX: Disambiguate FK — students has two FKs to users (user_id + blocked_by)
+  // PostgREST needs an explicit hint to use the correct one.
   const { data: userRecord } = await db
     .from('users')
     .select(`
       id,
       full_name,
       is_active,
-      students (
+      students!students_user_id_fkey (
         id,
         roll_number,
         is_blocked,
@@ -320,6 +322,8 @@ export async function authorizeViaManual(
     ipAddress,
   }
 
+  // FIX: Disambiguate FK — students has two FKs to users (user_id + blocked_by)
+  // Use students_user_id_fkey to navigate from students → users correctly.
   const { data: student } = await db
     .from('students')
     .select(`
@@ -327,7 +331,7 @@ export async function authorizeViaManual(
       roll_number,
       is_blocked,
       block_reason,
-      users!inner (
+      users!students_user_id_fkey (
         id,
         full_name,
         is_active
