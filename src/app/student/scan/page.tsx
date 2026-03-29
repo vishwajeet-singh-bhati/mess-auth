@@ -17,42 +17,167 @@ const DENIAL_MESSAGES: Record<string, { title: string; hint: string }> = {
   student_not_found:  { title: 'Not Found',          hint: 'Your account is not set up. Contact admin.' },
 }
 
-// ─── Anti-screenshot animated QR pattern ────────────────────────────────────
+// ─── Roti Toss anti-screenshot animation ─────────────────────────────────────
 
-function AnimatedQRPattern({ seed }: { seed: number }) {
-  const size = 11
-  // Generate a pseudo-random grid from the seed
-  const grid: boolean[][] = Array.from({ length: size }, (_, r) =>
-    Array.from({ length: size }, (_, c) => {
-      const v = Math.sin(seed * 9301 + r * 49297 + c * 233) * 49297
-      return (v - Math.floor(v)) > 0.45
-    })
-  )
-
+function RotiTossAnimation() {
   return (
     <div style={{
-      display: 'inline-grid',
-      gridTemplateColumns: `repeat(${size}, 1fr)`,
-      gap: '2px',
-      padding: '10px',
-      background: '#fff',
-      borderRadius: '8px',
-      width: '120px',
-      height: '120px',
-      animation: 'qrPulse 1.5s ease-in-out infinite',
+      width: '200px',
+      height: '160px',
+      overflow: 'hidden',
+      borderRadius: '12px',
+      background: 'rgba(255,255,255,0.05)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
     }}>
-      {grid.flat().map((filled, i) => (
-        <div key={i} style={{
-          background: filled ? '#111' : '#fff',
-          borderRadius: '1px',
-        }} />
-      ))}
-      <style>{`
-        @keyframes qrPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.7; transform: scale(0.97); }
-        }
-      `}</style>
+      <svg viewBox="0 0 680 320" width="200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="thaliG" cx="50%" cy="40%" r="50%">
+            <stop offset="0%" stopColor="#e8e0cc"/>
+            <stop offset="70%" stopColor="#c8b99a"/>
+            <stop offset="100%" stopColor="#a89070"/>
+          </radialGradient>
+          <radialGradient id="rotiG" cx="45%" cy="40%" r="55%">
+            <stop offset="0%" stopColor="#e8c97a"/>
+            <stop offset="50%" stopColor="#d4a855"/>
+            <stop offset="100%" stopColor="#9c6f2a"/>
+          </radialGradient>
+        </defs>
+
+        {/* Steam wisps */}
+        <g opacity="0.35">
+          <path d="M100 200 Q105 180 100 160 Q95 140 100 120" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round">
+            <animate attributeName="opacity" values="0;0.6;0" dur="2s" repeatCount="indefinite"/>
+          </path>
+          <path d="M130 210 Q137 188 130 165 Q123 143 130 120" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round">
+            <animate attributeName="opacity" values="0;0.5;0" dur="2.4s" repeatCount="indefinite"/>
+          </path>
+        </g>
+
+        {/* Cook — legs */}
+        <rect x="78" y="248" width="14" height="40" rx="4" fill="#7c3aed"/>
+        <rect x="98" y="248" width="14" height="40" rx="4" fill="#7c3aed"/>
+        {/* shoes */}
+        <ellipse cx="85" cy="290" rx="10" ry="5" fill="#3b1f0a"/>
+        <ellipse cx="105" cy="290" rx="10" ry="5" fill="#3b1f0a"/>
+        {/* body / apron */}
+        <rect x="68" y="185" width="54" height="70" rx="10" fill="#fff"/>
+        <rect x="80" y="185" width="30" height="70" rx="4" fill="#e0e0e0"/>
+        {/* apron strings */}
+        <line x1="80" y1="200" x2="68" y2="220" stroke="#ccc" strokeWidth="2"/>
+        <line x1="110" y1="200" x2="122" y2="220" stroke="#ccc" strokeWidth="2"/>
+        {/* head */}
+        <ellipse cx="95" cy="170" rx="22" ry="24" fill="#c68642"/>
+        {/* chef hat */}
+        <rect x="74" y="140" width="42" height="18" rx="4" fill="#fff"/>
+        <ellipse cx="95" cy="140" rx="18" ry="10" fill="#fff"/>
+        {/* eyes */}
+        <ellipse cx="88" cy="170" rx="3" ry="3.5" fill="#2d1a00"/>
+        <ellipse cx="102" cy="170" rx="3" ry="3.5" fill="#2d1a00"/>
+        {/* determined eyebrows */}
+        <line x1="84" y1="163" x2="92" y2="165" stroke="#2d1a00" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1="98" y1="165" x2="106" y2="163" stroke="#2d1a00" strokeWidth="2.5" strokeLinecap="round"/>
+        {/* serious mouth */}
+        <line x1="89" y1="180" x2="101" y2="180" stroke="#2d1a00" strokeWidth="2" strokeLinecap="round"/>
+
+        {/* Throwing arm — animates */}
+        <g>
+          <animateTransform
+            attributeName="transform" type="rotate"
+            values="-20 95 205; 40 95 205; -20 95 205"
+            dur="1.2s" repeatCount="indefinite" calcMode="spline"
+            keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+          />
+          <rect x="118" y="195" width="40" height="12" rx="6" fill="#c68642"/>
+          <ellipse cx="158" cy="201" rx="10" ry="8" fill="#c68642"/>
+        </g>
+
+        {/* Static other arm */}
+        <rect x="37" y="195" width="35" height="12" rx="6" fill="#c68642"/>
+        <ellipse cx="37" cy="201" rx="9" ry="7" fill="#c68642"/>
+
+        {/* Thali (plate) */}
+        <g transform="translate(370,230)">
+          <ellipse cx="0" cy="0" rx="115" ry="28" fill="#a89070"/>
+          <ellipse cx="0" cy="-4" rx="100" ry="22" fill="url(#thaliG)"/>
+          <ellipse cx="-30" cy="-8" rx="40" ry="8" fill="#fff" opacity="0.18"/>
+        </g>
+
+        {/* Roti stack on plate — wobbly */}
+        <g transform="translate(370,210)">
+          <animateTransform
+            attributeName="transform" type="rotate"
+            values="-2 370 210; 2 370 210; -2 370 210"
+            dur="0.9s" repeatCount="indefinite"
+            calcMode="spline" keySplines="0.4 0 0.6 1;0.4 0 0.6 1"
+          />
+          <ellipse cx="0" cy="20" rx="70" ry="14" fill="#9c6f2a" opacity="0.6"/>
+          <ellipse cx="0" cy="14" rx="72" ry="14" fill="#c88f40"/>
+          <ellipse cx="2" cy="7" rx="70" ry="13" fill="#d4a855"/>
+          <ellipse cx="-2" cy="1" rx="68" ry="13" fill="#e8c97a"/>
+          <ellipse cx="1" cy="-5" rx="66" ry="12" fill="url(#rotiG)"/>
+          {/* char spots on top roti */}
+          <ellipse cx="-15" cy="-7" rx="6" ry="4" fill="#7a4b10" opacity="0.55"/>
+          <ellipse cx="20" cy="-3" rx="7" ry="5" fill="#7a4b10" opacity="0.45"/>
+          <ellipse cx="0" cy="-2" rx="4" ry="3" fill="#5a3508" opacity="0.4"/>
+        </g>
+
+        {/* Flying roti 1 */}
+        <g>
+          <animateTransform
+            attributeName="transform" type="translate"
+            values="160,130; 310,165; 420,195"
+            dur="1.2s" repeatCount="indefinite" begin="0s"
+            calcMode="spline" keySplines="0.25 0.1 0.25 1; 0.25 0.1 0.25 1"
+          />
+          <g>
+            <animateTransform
+              attributeName="transform" type="rotate"
+              values="0; 180; 360" dur="1.2s" repeatCount="indefinite" begin="0s"
+            />
+            <ellipse cx="0" cy="0" rx="34" ry="10" fill="url(#rotiG)" opacity="0.92"/>
+            <ellipse cx="-8" cy="-1" rx="5" ry="3" fill="#7a4b10" opacity="0.4"/>
+            <ellipse cx="10" cy="2" rx="4" ry="2.5" fill="#5a3508" opacity="0.35"/>
+          </g>
+        </g>
+
+        {/* Flying roti 2 — offset timing */}
+        <g>
+          <animateTransform
+            attributeName="transform" type="translate"
+            values="155,160; 300,188; 415,210"
+            dur="1.2s" repeatCount="indefinite" begin="0.6s"
+            calcMode="spline" keySplines="0.25 0.1 0.25 1; 0.25 0.1 0.25 1"
+          />
+          <g>
+            <animateTransform
+              attributeName="transform" type="rotate"
+              values="0; -200; -360" dur="1.2s" repeatCount="indefinite" begin="0.6s"
+            />
+            <ellipse cx="0" cy="0" rx="32" ry="9" fill="#d4a855" opacity="0.88"/>
+            <ellipse cx="6" cy="-2" rx="4" ry="2.5" fill="#7a4b10" opacity="0.4"/>
+          </g>
+        </g>
+
+        {/* Flying roti 3 — arcs high */}
+        <g>
+          <animateTransform
+            attributeName="transform" type="translate"
+            values="165,120; 310,80; 405,190"
+            dur="1.4s" repeatCount="indefinite" begin="0.3s"
+            calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+          />
+          <g>
+            <animateTransform
+              attributeName="transform" type="rotate"
+              values="15; 200; 360" dur="1.4s" repeatCount="indefinite" begin="0.3s"
+            />
+            <ellipse cx="0" cy="0" rx="30" ry="8.5" fill="#e8c97a" opacity="0.85"/>
+            <ellipse cx="-6" cy="1" rx="5" ry="3" fill="#9c6f2a" opacity="0.4"/>
+          </g>
+        </g>
+      </svg>
     </div>
   )
 }
@@ -63,8 +188,6 @@ export default function ScanPage() {
   const [torchOn, setTorchOn]       = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  // Seed changes every render of success/warning to make pattern unique each time
-  const [qrSeed, setQrSeed]         = useState(0)
 
   const videoRef      = useRef<HTMLVideoElement>(null)
   const canvasRef     = useRef<HTMLCanvasElement>(null)
@@ -95,9 +218,6 @@ export default function ScanPage() {
       setResult(data)
 
       if (data.success) {
-        // Generate a fresh random seed for the animated QR pattern
-        setQrSeed(Date.now())
-        // Show warning state if in grace period, otherwise normal success
         setPhase(data.data?.is_grace_period ? 'warning' : 'success')
       } else {
         setPhase('denied')
@@ -334,8 +454,8 @@ export default function ScanPage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#0a0a0a', animation: 'fadeUp 0.35s ease both' }}>
           <div style={{ background: 'linear-gradient(135deg,#14532d,#166534)', padding: '3rem 2rem 2rem',
             textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-            {/* Anti-screenshot animated QR */}
-            <AnimatedQRPattern seed={qrSeed} />
+            {/* Roti Toss anti-screenshot animation */}
+            <RotiTossAnimation />
             <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem',
               animation: 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>✓</div>
@@ -353,13 +473,13 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* ── WARNING (grace period — entry granted but outside strict hours) ── */}
+      {/* ── WARNING (grace period) ── */}
       {phase === 'warning' && result?.success && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#0a0a0a', animation: 'fadeUp 0.35s ease both' }}>
           <div style={{ background: 'linear-gradient(135deg,#431407,#92400e)', padding: '3rem 2rem 2rem',
             textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-            {/* Anti-screenshot animated QR */}
-            <AnimatedQRPattern seed={qrSeed} />
+            {/* Roti Toss anti-screenshot animation */}
+            <RotiTossAnimation />
             <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem',
               animation: 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>⚠️</div>
