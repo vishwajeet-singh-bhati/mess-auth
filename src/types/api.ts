@@ -44,6 +44,8 @@ export interface MealAuthSuccessData {
   authorized_at: string        // ISO string
   subscription_valid_until: string
   method: AuthorizationMethod
+  is_grace_period?: boolean
+  grace_type?: 'early' | 'late'
 }
 
 export interface AuthSuccessResponse {

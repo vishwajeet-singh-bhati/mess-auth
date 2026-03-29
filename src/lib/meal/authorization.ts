@@ -9,6 +9,7 @@
 //   4. Check subscription is for the CORRECT mess
 //      (or temporary permission override)
 //   5. Determine active meal slot from DB config
+//      (includes 15-min grace period before/after)
 //   6. Check student hasn't already consumed this slot today
 //   7. AUTHORIZE: write meal_log
 //   8. Log all attempts (success & denied) for reporting
@@ -109,15 +110,6 @@ async function logAttempt(
 
 // ─── QR-based authorization ──────────────────────────────────────────────────
 
-/**
- * Authorize a student meal via static QR scan.
- *
- * The QR poster contains a plain mess identifier: "MESS_A" or "MESS_B"
- * Student scans it → app sends it here → we check subscription + meal slot.
- *
- * Called from: POST /api/auth/scan
- * Requires: valid Supabase session (student auth_id)
- */
 export async function authorizeViaScan(
   qrToken: string,
   studentAuthId: string,
@@ -128,7 +120,6 @@ export async function authorizeViaScan(
   const now = new Date()
 
   // ── STEP 1: Validate mess ID from static QR ──────────────────────────────
-  // QR contains "MESS_A" or "MESS_B" — normalize to lowercase "mess_a"/"mess_b"
   const messId = qrToken.trim().toLowerCase() as MessId
 
   if (!VALID_MESS_IDS.includes(messId)) {
@@ -149,7 +140,6 @@ export async function authorizeViaScan(
 
   // ── STEP 2: Fetch student profile ────────────────────────────────────────
   // FIX: Disambiguate FK — students has two FKs to users (user_id + blocked_by)
-  // PostgREST needs an explicit hint to use the correct one.
   const { data: userRecord } = await db
     .from('users')
     .select(`
@@ -228,7 +218,7 @@ export async function authorizeViaScan(
     }
   }
 
-  // ── STEP 5: Determine current meal slot ──────────────────────────────────
+  // ── STEP 5: Determine current meal slot (with grace period) ──────────────
   const { data: mealSlots } = await db
     .from('meal_slots')
     .select('meal_type, start_time, end_time, is_active')
@@ -295,6 +285,9 @@ export async function authorizeViaScan(
     authorized_at:            now.toISOString(),
     subscription_valid_until: subscription.end_date,
     method:                   'qr_scan',
+    // Grace period info — passed to UI for warning display
+    is_grace_period:          activeSlot.is_grace_period,
+    grace_type:               activeSlot.grace_type,
   }
 
   return { success: true, data: responseData }
@@ -302,9 +295,6 @@ export async function authorizeViaScan(
 
 // ─── Manual staff authorization ──────────────────────────────────────────────
 
-/**
- * Authorize a student meal via manual roll number entry by staff.
- */
 export async function authorizeViaManual(
   rollNumber: string,
   staffUserId: string,
@@ -322,8 +312,7 @@ export async function authorizeViaManual(
     ipAddress,
   }
 
-  // FIX: Disambiguate FK — students has two FKs to users (user_id + blocked_by)
-  // Use students_user_id_fkey to navigate from students → users correctly.
+  // FIX: Disambiguate FK
   const { data: student } = await db
     .from('students')
     .select(`
@@ -452,6 +441,8 @@ export async function authorizeViaManual(
       authorized_at:            now.toISOString(),
       subscription_valid_until: subscription.end_date,
       method:                   'manual_staff',
+      is_grace_period:          activeSlot.is_grace_period,
+      grace_type:               activeSlot.grace_type,
     },
   }
 }
