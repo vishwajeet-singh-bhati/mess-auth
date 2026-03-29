@@ -1,28 +1,14 @@
 // app/api/auth/scan/route.ts
-// ============================================================
-// QR Scan Authorization Endpoint
-// Called when a logged-in student scans a mess entrance QR.
-//
-// POST /api/auth/scan
-// Body: { qr_token: "MESS_A" | "MESS_B" }
-// Auth: Requires valid Supabase student session
-//
-// Returns:
-//   200 → { success: true, data: MealAuthSuccessData }
-//   403 → { success: false, reason: DenialReason, message: string }
-//   401 → { error: "Authentication required" }
-//   400 → { error: "Missing qr_token" }
-// ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { authorizeViaScan } from '@/lib/meal/authorization'
 import { unauthorized, badRequest } from '@/lib/auth/permissions'
 import { scanLimiter } from '@/lib/utils/rate-limit'
 import type { ScanAuthRequest } from '@/types/api'
 
 export async function POST(req: NextRequest) {
-  // ── Authenticate student ──────────────────────────────────────────────────
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -33,7 +19,19 @@ export async function POST(req: NextRequest) {
     return unauthorized()
   }
 
-  // ── Rate limiting (per user ID, not IP, since students share networks) ────
+  // ── DEBUG: check what the admin client sees for this user ─────────────────
+  const db = createAdminClient()
+  const { data: debugUser, error: debugError } = await db
+    .from('users')
+    .select('id, email, is_active, auth_id')
+    .eq('auth_id', user.id)
+    .single()
+
+  console.log('[SCAN DEBUG] auth user id:', user.id)
+  console.log('[SCAN DEBUG] db lookup result:', JSON.stringify(debugUser))
+  console.log('[SCAN DEBUG] db lookup error:', JSON.stringify(debugError))
+  // ─────────────────────────────────────────────────────────────────────────
+
   const { success: rlOk, retryAfter } = scanLimiter.check(user.id)
   if (!rlOk) {
     return NextResponse.json(
@@ -42,7 +40,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // ── Parse request body ────────────────────────────────────────────────────
   let body: ScanAuthRequest
   try {
     body = await req.json()
@@ -56,12 +53,10 @@ export async function POST(req: NextRequest) {
     return badRequest('Missing or invalid qr_token field')
   }
 
-  // Static QR only contains "MESS_A" or "MESS_B" — max 10 chars
   if (qr_token.length > 10) {
     return badRequest('Invalid QR code')
   }
 
-  // ── Extract client metadata for audit log ────────────────────────────────
   const ipAddress =
     req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
     req.headers.get('x-real-ip') ??
@@ -69,7 +64,6 @@ export async function POST(req: NextRequest) {
 
   const userAgent = req.headers.get('user-agent') ?? undefined
 
-  // ── Run authorization engine ──────────────────────────────────────────────
   const result = await authorizeViaScan(
     qr_token,
     user.id,
