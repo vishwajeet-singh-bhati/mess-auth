@@ -3,7 +3,7 @@
 
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 interface TopBarProps {
   title:     string
@@ -26,66 +26,50 @@ export function TopBar({ title, subtitle, back, action, userName }: TopBarProps)
   return (
     <header style={{
       position: 'sticky', top: 0, zIndex: 50,
-      background: 'rgba(8,10,15,0.85)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      background: 'rgba(0,0,0,0.95)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderBottom: '1px solid #1e1e1e',
       padding: '0 1rem',
       display: 'flex', alignItems: 'center', gap: '0.75rem',
-      height: '56px', minHeight: '56px',
+      height: '52px', minHeight: '52px',
     }}>
       {back && (
         <button onClick={() => router.back()} style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '8px',
-          width: '32px', height: '32px',
+          background: 'none', border: '1px solid #2e2e2e',
+          borderRadius: '6px', width: '30px', height: '30px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-2)', fontSize: '0.9rem', cursor: 'pointer',
-          flexShrink: 0, transition: 'background 0.15s',
-        }}>
-          ←
-        </button>
+          color: '#999', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0,
+        }}>←</button>
       )}
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontFamily: "'Syne', sans-serif",
-          fontWeight: 700, fontSize: '0.95rem',
-          color: 'var(--text)',
-          letterSpacing: '-0.01em',
+          fontFamily: "'DM Serif Display', Georgia, serif",
+          fontWeight: 400, fontSize: '1rem',
+          color: '#fff', letterSpacing: '-0.01em',
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {title}
-        </div>
+        }}>{title}</div>
         {subtitle && (
           <div style={{
-            fontSize: '0.7rem', color: 'var(--text-3)',
+            fontSize: '0.7rem', color: '#888',
             fontFamily: "'JetBrains Mono', monospace",
             marginTop: '1px',
-          }}>
-            {subtitle}
-          </div>
+          }}>{subtitle}</div>
         )}
       </div>
 
       {action && <div style={{ flexShrink: 0 }}>{action}</div>}
 
       {userName && (
-        <button onClick={handleSignOut}
-          title={`Signed in as ${userName} — click to sign out`}
-          style={{
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '8px',
-            padding: '0.3rem 0.6rem',
-            color: 'var(--text-3)',
-            fontSize: '0.72rem', fontWeight: 500,
-            cursor: 'pointer', flexShrink: 0,
-            display: 'flex', alignItems: 'center', gap: '0.3rem',
-            transition: 'all 0.15s',
-          }}>
-          <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>⏻</span>
+        <button onClick={handleSignOut} title={`Sign out`} style={{
+          background: 'none', border: '1px solid #2e2e2e',
+          borderRadius: '6px', padding: '0.25rem 0.6rem',
+          color: '#888', fontSize: '0.7rem', fontWeight: 500,
+          cursor: 'pointer', flexShrink: 0,
+          transition: 'border-color 0.15s, color 0.15s',
+        }}>
+          Sign out
         </button>
       )}
     </header>

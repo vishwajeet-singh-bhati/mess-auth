@@ -1,4 +1,4 @@
-// app/student/dashboard/page.tsx — Premium Dark Redesign
+// app/student/dashboard/page.tsx — Brutalist Dark
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -6,7 +6,6 @@ import { getServerUserProfile } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dateToDateString, MEAL_DISPLAY, MESS_DISPLAY } from '@/lib/meal/slots'
 import { TopBar } from '@/components/shared/TopBar'
-import { Card, Badge } from '@/components/shared/ui'
 import type { MealType, MessId } from '@/types/database'
 
 export const metadata = { title: 'Dashboard' }
@@ -61,208 +60,118 @@ export default async function StudentDashboardPage() {
   const firstName = profile.full_name.split(' ')[0]
   const consumedCount = consumedSlots.size
 
-  const mealIcons: Record<MealType, string> = {
-    breakfast: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z',
-    lunch: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z',
-    snacks: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m1.636-6.364l.707.707M12 21v-1m0-16a7 7 0 017 7h-1a6 6 0 10-12 0H5a7 7 0 017-7z',
-    dinner: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z',
-  }
-
   return (
     <>
       <TopBar
-        title={`Hey, ${firstName}`}
+        title={`${firstName}`}
         subtitle={student?.roll_number}
         userName={profile.full_name}
       />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingTop: '0.75rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', paddingTop: '0' }}>
 
         {/* Blocked warning */}
         {student?.is_blocked && (
           <div style={{
-            background: 'rgba(248,113,113,0.08)',
-            border: '1px solid rgba(248,113,113,0.2)',
-            borderRadius: '12px', padding: '1rem',
+            background: '#111', borderBottom: '1px solid #2e2e2e',
+            padding: '1rem',
             display: 'flex', alignItems: 'center', gap: '0.75rem',
           }}>
-            <div style={{
-              width: '36px', height: '36px', borderRadius: '10px',
-              background: 'rgba(248,113,113,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.1rem', flexShrink: 0,
-            }}>🔒</div>
-            <div>
-              <div style={{ fontWeight: 700, color: '#f87171', fontSize: '0.88rem' }}>Account Blocked</div>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(248,113,113,0.6)', marginTop: '0.1rem' }}>
-                Contact the hostel office to resolve this.
-              </div>
-            </div>
+            <div style={{ fontSize: '0.88rem', color: '#ccc', fontWeight: 600 }}>Account Blocked</div>
+            <div style={{ fontSize: '0.78rem', color: '#666' }}>Contact the hostel office.</div>
           </div>
         )}
 
-        {/* ── NO SUBSCRIPTION ── */}
+        {/* No subscription */}
         {!subscription && (
-          <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '16px', padding: '2rem 1.5rem',
-            textAlign: 'center',
-          }}>
+          <div style={{ padding: '2rem 1rem', borderBottom: '1px solid #111' }}>
             <div style={{
-              width: '56px', height: '56px', borderRadius: '16px',
-              background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.5rem', margin: '0 auto 1rem',
-            }}>🍽️</div>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700,
-              fontSize: '1rem', color: '#f0f2f8', marginBottom: '0.4rem' }}>
-              No mess selected yet
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: '1.5rem', color: '#fff', marginBottom: '0.5rem',
+            }}>
+              No mess selected
             </div>
-            <div style={{ fontSize: '0.82rem', color: '#5a647a',
-              marginBottom: '1.5rem', lineHeight: 1.6 }}>
-              Choose your mess to start authorizing meals
+            <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+              Choose a mess to start authorizing meals.
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-              {(['mess_a', 'mess_b'] as const).map(messId => {
-                const isA = messId === 'mess_a'
-                const color = isA ? '#6366f1' : '#34d399'
-                return (
-                  <Link key={messId} href={`/student/select-mess?mess=${messId}`}
-                    style={{ textDecoration: 'none', flex: 1, maxWidth: '150px' }}>
-                    <div style={{
-                      background: `${color}10`,
-                      border: `1px solid ${color}25`,
-                      borderRadius: '12px', padding: '1rem 0.75rem',
-                      textAlign: 'center', transition: 'border-color 0.2s',
-                    }}>
-                      <div style={{ fontSize: '1.4rem', marginBottom: '0.35rem' }}>
-                        {isA ? '🔵' : '🟢'}
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color,
-                        fontFamily: "'Syne', sans-serif" }}>
-                        {isA ? 'Mess A' : 'Mess B'}
-                      </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              {(['mess_a', 'mess_b'] as const).map(messId => (
+                <Link key={messId} href={`/student/select-mess?mess=${messId}`}
+                  style={{ textDecoration: 'none', flex: 1 }}>
+                  <div style={{
+                    background: '#111', border: '1px solid #2e2e2e',
+                    borderRadius: '8px', padding: '1rem',
+                    textAlign: 'center', transition: 'border-color 0.15s',
+                  }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff',
+                      fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                      {messId === 'mess_a' ? 'Mess A' : 'Mess B'}
                     </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── SUBSCRIPTION CARD ── */}
-        {subscription && (
-          <div style={{
-            background: subscription.mess_id === 'mess_a'
-              ? 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.03) 100%)'
-              : 'linear-gradient(135deg, rgba(167,139,250,0.08) 0%, rgba(167,139,250,0.03) 100%)',
-            border: subscription.mess_id === 'mess_a'
-              ? '1px solid rgba(99,102,241,0.2)'
-              : '1px solid rgba(167,139,250,0.2)',
-            borderRadius: '16px', padding: '1.25rem',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            {/* Glow orb */}
-            <div style={{
-              position: 'absolute', top: '-20px', right: '-20px',
-              width: '100px', height: '100px', borderRadius: '50%',
-              background: subscription.mess_id === 'mess_a' ? '#6366f1' : '#a78bfa',
-              opacity: 0.08, filter: 'blur(30px)', pointerEvents: 'none',
-            }} />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between',
-              alignItems: 'flex-start', marginBottom: '1rem' }}>
-              <div>
-                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#5a647a',
-                  textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.3rem' }}>
-                  Active Subscription
-                </div>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: '1.4rem',
-                  fontWeight: 800, color: '#f0f2f8', letterSpacing: '-0.02em' }}>
-                  {messDisplay?.label}
-                </div>
-              </div>
-              <Badge variant={subscription.mess_id === 'mess_a' ? 'info' : 'purple'}>
-                {messDisplay?.short}
-              </Badge>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>
-              {[
-                {
-                  label: 'VALID UNTIL',
-                  value: new Date(subscription.end_date).toLocaleDateString('en-IN', {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                  }),
-                  warn: false,
-                },
-                {
-                  label: 'DAYS LEFT',
-                  value: `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`,
-                  warn: daysLeft < 7,
-                },
-              ].map(item => (
-                <div key={item.label} style={{
-                  background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.65rem 0.8rem',
-                }}>
-                  <div style={{ fontSize: '0.62rem', color: '#5a647a', marginBottom: '0.2rem',
-                    letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                    {item.label}
+                    <div style={{ fontSize: '0.72rem', color: '#666', marginTop: '0.25rem' }}>
+                      Select
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 700,
-                    color: item.warn ? '#fbbf24' : '#f0f2f8',
-                    fontFamily: item.warn ? "'Syne', sans-serif" : 'inherit' }}>
-                    {item.value}
-                  </div>
-                </div>
+                </Link>
               ))}
             </div>
+          </div>
+        )}
 
-            {/* Meal progress bar */}
-            <div style={{ marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', marginBottom: '0.4rem' }}>
-                <span style={{ fontSize: '0.65rem', color: '#5a647a',
-                  textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Today's meals
-                </span>
-                <span style={{ fontSize: '0.72rem', color: '#a8b0c8',
-                  fontFamily: "'JetBrains Mono', monospace" }}>
-                  {consumedCount}/4
-                </span>
+        {/* Subscription block */}
+        {subscription && (
+          <div style={{
+            background: '#fff', padding: '1.5rem 1rem',
+          }}>
+            <div style={{ fontSize: '0.65rem', color: '#888', fontWeight: 700,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              fontFamily: "'JetBrains Mono', monospace", marginBottom: '0.5rem' }}>
+              Active Subscription
+            </div>
+            <div style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: '2.2rem', color: '#000', letterSpacing: '-0.02em',
+              lineHeight: 1, marginBottom: '1rem',
+            }}>
+              {messDisplay?.label}
+            </div>
+            <div style={{ display: 'flex', gap: '1.5rem' }}>
+              <div>
+                <div style={{ fontSize: '0.65rem', color: '#888', letterSpacing: '0.08em',
+                  textTransform: 'uppercase', marginBottom: '0.2rem' }}>Valid Until</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#000' }}>
+                  {new Date(subscription.end_date).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                  })}
+                </div>
               </div>
-              <div style={{
-                height: '4px', background: 'rgba(255,255,255,0.06)',
-                borderRadius: '99px', overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%', borderRadius: '99px',
-                  width: `${(consumedCount / 4) * 100}%`,
-                  background: consumedCount === 4
-                    ? '#34d399'
-                    : subscription.mess_id === 'mess_a' ? '#6366f1' : '#a78bfa',
-                  transition: 'width 0.5s ease',
-                }} />
+              <div>
+                <div style={{ fontSize: '0.65rem', color: '#888', letterSpacing: '0.08em',
+                  textTransform: 'uppercase', marginBottom: '0.2rem' }}>Days Left</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600,
+                  color: daysLeft < 7 ? '#555' : '#000' }}>
+                  {daysLeft}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.65rem', color: '#888', letterSpacing: '0.08em',
+                  textTransform: 'uppercase', marginBottom: '0.2rem' }}>Today</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#000' }}>
+                  {consumedCount}/4 meals
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Pending change request */}
+        {/* Pending request notice */}
         {pendingRequest && (
-          <div style={{
-            background: 'rgba(251,191,36,0.06)',
-            border: '1px solid rgba(251,191,36,0.2)',
-            borderRadius: '12px', padding: '0.85rem 1rem',
-            display: 'flex', alignItems: 'center', gap: '0.75rem',
-          }}>
-            <span style={{ fontSize: '1rem' }}>⏳</span>
-            <div>
-              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#fbbf24' }}>
+          <div style={{ background: '#0a0a0a', borderBottom: '1px solid #1e1e1e',
+            padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#ccc' }}>
                 Mess change pending
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#5a647a', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.72rem', color: '#666', marginTop: '0.1rem' }}>
                 Requested {MESS_DISPLAY[pendingRequest.to_mess_id as MessId]?.label} — awaiting approval
               </div>
             </div>
@@ -271,35 +180,34 @@ export default async function StudentDashboardPage() {
 
         {/* Scan CTA */}
         {subscription && !student?.is_blocked && (
-          <Link href="/student/scan" style={{ textDecoration: 'none' }}>
+          <Link href="/student/scan" style={{ textDecoration: 'none', display: 'block' }}>
             <div style={{
-              background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
-              borderRadius: '16px', padding: '1.1rem 1.25rem',
+              background: '#111', borderBottom: '1px solid #1e1e1e',
+              padding: '1rem',
               display: 'flex', alignItems: 'center', gap: '1rem',
-              border: '1px solid rgba(99,102,241,0.4)',
-              boxShadow: '0 4px 24px rgba(99,102,241,0.25)',
-              transition: 'transform 0.15s',
+              transition: 'background 0.15s',
             }}>
               <div style={{
-                width: '46px', height: '46px', borderRadius: '12px',
-                background: 'rgba(255,255,255,0.15)',
+                width: '44px', height: '44px', borderRadius: '8px',
+                background: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-                  stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700,
-                  fontSize: '1rem', color: 'white' }}>Scan Mess QR</div>
-                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.1rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>
+                  Scan Mess QR
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.1rem' }}>
                   Tap to authorize meal entry
                 </div>
               </div>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="rgba(255,255,255,0.5)" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="#333" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
               </svg>
             </div>
@@ -308,49 +216,37 @@ export default async function StudentDashboardPage() {
 
         {/* Today's meals */}
         {subscription && (
-          <div>
-            <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#5a647a',
-              textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.65rem' }}>
-              Meal Status
+          <div style={{ background: '#0a0a0a', padding: '1rem' }}>
+            <div style={{ fontSize: '0.65rem', color: '#666', fontWeight: 700,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              fontFamily: "'JetBrains Mono', monospace", marginBottom: '0.85rem' }}>
+              Today's meals
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               {mealOrder.map(slot => {
                 const consumed = consumedSlots.has(slot)
                 const meta = MEAL_DISPLAY[slot]
-                const iconPath = mealIcons[slot]
                 return (
                   <div key={slot} style={{
-                    background: consumed
-                      ? 'rgba(52,211,153,0.08)'
-                      : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${consumed ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.06)'}`,
-                    borderRadius: '12px', padding: '0.85rem',
+                    background: consumed ? '#1a1a1a' : '#111',
+                    border: `1px solid ${consumed ? '#fff' : '#1e1e1e'}`,
+                    borderRadius: '8px', padding: '0.85rem',
                     display: 'flex', alignItems: 'center', gap: '0.65rem',
-                    transition: 'all 0.2s',
                   }}>
-                    <div style={{
-                      width: '32px', height: '32px', borderRadius: '9px',
-                      background: consumed ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={consumed ? '#34d399' : '#5a647a'}
-                        strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                        <path d={iconPath} />
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600,
-                        color: consumed ? '#34d399' : '#5a647a' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 600,
+                        color: consumed ? '#fff' : '#555' }}>
                         {meta.label}
                       </div>
-                      <div style={{ fontSize: '0.65rem',
-                        color: consumed ? 'rgba(52,211,153,0.6)' : '#2a3248',
+                      <div style={{ fontSize: '0.68rem', marginTop: '0.15rem',
+                        color: consumed ? '#888' : '#333',
                         fontFamily: "'JetBrains Mono', monospace" }}>
-                        {consumed ? '✓ done' : '—'}
+                        {consumed ? 'done' : '—'}
                       </div>
                     </div>
+                    {consumed && (
+                      <div style={{ fontSize: '0.75rem', color: '#fff', fontWeight: 700 }}>✓</div>
+                    )}
                   </div>
                 )
               })}
@@ -359,55 +255,35 @@ export default async function StudentDashboardPage() {
         )}
 
         {/* Quick actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#5a647a',
-            textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>
-            Quick Actions
+        <div style={{ background: '#0a0a0a', padding: '1rem',
+          display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ fontSize: '0.65rem', color: '#666', fontWeight: 700,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            fontFamily: "'JetBrains Mono', monospace", marginBottom: '0.35rem' }}>
+            Actions
           </div>
           {[
-            {
-              href: '/student/history', show: true,
-              icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-              label: 'Meal History',
-              sub: 'View all past meals',
-            },
-            {
-              href: '/student/change-request',
-              show: !!subscription && !pendingRequest,
-              icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
-              label: 'Request Mess Change',
-              sub: 'Switch to another mess',
-            },
+            { href: '/student/history', label: 'View Meal History', sub: 'See all past meals', show: true },
+            { href: '/student/change-request', label: 'Request Mess Change', sub: 'Switch to another mess',
+              show: !!subscription && !pendingRequest },
           ].filter(i => i.show).map(item => (
             <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
               <div style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: '12px', padding: '0.9rem 1rem',
-                display: 'flex', alignItems: 'center', gap: '0.9rem',
-                transition: 'border-color 0.2s',
+                background: '#111', border: '1px solid #1e1e1e',
+                borderRadius: '8px', padding: '0.9rem 1rem',
+                display: 'flex', alignItems: 'center', gap: '0.85rem',
+                transition: 'border-color 0.15s',
               }}>
-                <div style={{
-                  width: '34px', height: '34px', borderRadius: '9px',
-                  background: 'rgba(99,102,241,0.1)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    stroke="#818cf8" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                    <path d={item.icon} />
-                  </svg>
-                </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f0f2f8' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ccc' }}>
                     {item.label}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#5a647a', marginTop: '0.1rem' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#666', marginTop: '0.1rem' }}>
                     {item.sub}
                   </div>
                 </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="#2a3248" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke="#333" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
               </div>
